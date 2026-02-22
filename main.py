@@ -16,53 +16,43 @@ app.add_middleware(
 @app.get("/check")
 async def check_uid(uid: str):
     async with async_playwright() as p:
-        # সার্ভারের জন্য headless=True অবশ্যই লাগবে
         browser = await p.chromium.launch(
             headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu'
-            ]
+            args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         )
         context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
-        
-        try:
-            await page.goto("https://www.midasbuy.com/midasbuy/bd/redeem/pubgm", wait_until="networkidle", timeout=60000)
-            
-            # কুকিজ একসেপ্ট
-            try:
-                accept = await page.wait_for_selector('text="Accept All"', timeout=5000)
-                if accept: await accept.click()
-            except: pass
 
-            # আইডি ইনপুট
-            id_btn = await page.wait_for_selector('text="Enter Your Player ID Now"', timeout=10000)
-            await id_btn.click()
+        # ইমেজ এবং অপ্রয়োজনীয় জিনিস ব্লক করা (স্পিড বাড়ানোর জন্য)
+        await page.route("**/*.{png,jpg,jpeg,gif,svg,css}", lambda route: route.abort())
+
+        try:
+            # সরাসরি আইডি সাবমিট করার চেষ্টা
+            url = f"https://www.midasbuy.com/midasbuy/bd/redeem/pubgm"
+            await page.goto(url, wait_until="domcontentloaded", timeout=45000)
             
-            input_box = await page.wait_for_selector('input[placeholder*="Player ID"]', timeout=5000)
+            # ইনপুট বক্সের জন্য অপেক্ষা
+            input_box = await page.wait_for_selector('input[placeholder*="Player ID"]', timeout=15000)
             await input_box.fill(uid)
+            
+            # এন্টার বা ওকে বাটন ক্লিক
             await page.keyboard.press("Enter")
             
-            await asyncio.sleep(6) # নাম লোড হওয়ার সময়
+            # নাম আসার জন্য অপেক্ষা
+            nickname_selector = 'span[class*="UserTabBox_name"]'
+            await page.wait_for_selector(nickname_selector, timeout=15000)
             
-            nickname = ""
-            # নতুন যে ক্লাসটি আপনি খুঁজে পেয়েছিলেন
-            el = await page.query_selector('span[class*="UserTabBox_name"]')
-            if el:
-                nickname = await el.inner_text()
-            
+            el = await page.query_selector(nickname_selector)
+            nickname = await el.inner_text() if el else "Not Found"
+
             await browser.close()
-            return {"status": "success", "nickname": nickname.strip() if nickname else "Not Found"}
+            return {"status": "success", "nickname": nickname.strip()}
 
         except Exception as e:
             await browser.close()
-            return {"status": "error", "message": str(e)[:50]}
+            return {"status": "error", "message": "Slow connection or ID not found"}
 
 if __name__ == "__main__":
-
     uvicorn.run(app, host="0.0.0.0", port=10000)
