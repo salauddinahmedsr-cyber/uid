@@ -17,7 +17,15 @@ app.add_middleware(
 async def check_uid(uid: str):
     async with async_playwright() as p:
         # সার্ভারের জন্য headless=True অবশ্যই লাগবে
-        browser = await p.chromium.launch(headless=True) 
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ]
+        )
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         )
@@ -56,4 +64,5 @@ async def check_uid(uid: str):
             return {"status": "error", "message": str(e)[:50]}
 
 if __name__ == "__main__":
+
     uvicorn.run(app, host="0.0.0.0", port=10000)
